@@ -40,4 +40,15 @@ async def main():
         await app.start()
         await app.updater.start_polling(allowed_updates=["message", "callback_query"])
         logger.info("Polling запущен, бот активен")
-        await asyncio.Event().wait
+        await asyncio.Event().wait()  # Бесконечное ожидание
+    except Exception as e:
+        logger.error(f"Ошибка в run_polling: {str(e)}")
+        raise
+
+if __name__ == "__main__":
+    logger.info("Старт программы botforguide.py")
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logger.error(f"Ошибка при запуске main: {str(e)}")
+        raise
