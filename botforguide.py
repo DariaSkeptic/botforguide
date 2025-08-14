@@ -37,16 +37,14 @@ async def main():
     await app.initialize()
     logger.info("Запуск polling...")
     try:
-        await app.run_polling(allowed_updates=["message", "callback_query"])
+        await app.start()
+        await app.updater.start_polling(allowed_updates=["message", "callback_query"])
         logger.info("Polling запущен, бот активен")
+        # Оставляем приложение работать
+        await asyncio.Event().wait()  # Бесконечное ожидание
     except Exception as e:
         logger.error(f"Ошибка в run_polling: {str(e)}")
         raise
-    finally:
-        logger.info("Остановка polling...")
-        await app.stop()
-        await app.shutdown()
-        logger.info("Бот полностью остановлен")
 
 if __name__ == "__main__":
     logger.info("Старт программы botforguide.py")
@@ -60,12 +58,3 @@ if __name__ == "__main__":
     
     logger.info("Добавляем задачу main() в цикл событий")
     loop.create_task(main())
-    
-    try:
-        logger.info("Запуск цикла событий с run_forever")
-        loop.run_forever()
-    except Exception as e:
-        logger.error(f"Ошибка в цикле событий: {str(e)}")
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
-        logger.info("Цикл событий закрыт")
