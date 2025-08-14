@@ -1,6 +1,7 @@
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import ContextTypes, CallbackContext, CommandHandler
+from telegram import BotCommand, BotCommandScopeUser
 import logging
 
 # Настройка логирования
@@ -124,12 +125,9 @@ async def set_admin_menu(application):
             ("restart", "🌿 Перезапуск", "Инициировать перезапуск бота"),
         ]
         await bot.set_my_commands(
-            commands=[(cmd, desc, "admin") for cmd, desc, _ in commands],
-            scope={"type": "users", "user_id": int(admin_user_id)}
+            commands=[BotCommand(cmd, desc) for cmd, desc, _ in commands],
+            scope=BotCommandScopeUser(user_id=int(admin_user_id))
         )
         logger.info(f"Меню админа установлено для пользователя {admin_user_id}")
     else:
         logger.error("Не удалось установить меню админа: ADMIN_USER_ID не задан")
-
-# Обновление botforguide.py для вызова set_admin_menu
-# (Добавим это в твой текущий botforguide.py ниже)
