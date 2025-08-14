@@ -1,1 +1,1 @@
-web: python bot_for_guides.py
+web: python botforguide.py
