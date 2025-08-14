@@ -31,16 +31,22 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def on_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
+    await update.message.reply_text(f"DEBUG: Получен текст: '{text}'")  # Отладка: принят текст
     if not DATE_RE.match(text):
         await update.message.reply_text("Формат даты: ДД.ММ.ГГГГ (например 14.08.1990).")
+        await update.message.reply_text(f"DEBUG: Regex не пройден для '{text}'")  # Отладка: regex
         return
+    await update.message.reply_text(f"DEBUG: Regex пройден, текст: '{text}'")  # Отладка: regex OK
     program = context.user_data.get("program")
     if not program:
         await update.message.reply_text(
             "Сессия не инициализирована. Перейди по ссылке из Instagram ещё раз."
         )
+        await update.message.reply_text(f"DEBUG: Нет программы в user_data")  # Отладка: нет программы
         return
+    await update.message.reply_text(f"DEBUG: Программа: {program}")  # Отладка: программа
     uid = update.effective_user.id
+    await update.message.reply_text(f"DEBUG: Антиспам can_issue={can_issue(uid)}")  # Отладка: антиспам
     if not can_issue(uid):
         wait = minutes_left(uid)
         await admin_notify(context, f"⛔️ Антиспам\nПользователь: {fmt_user(update.effective_user)}\n"
@@ -48,10 +54,13 @@ async def on_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = "Лимит выдачи исчерпан. Попробуй позже."
         if wait: msg += f" Ориентировочно через {wait} мин."
         await update.message.reply_text(msg)
+        await update.message.reply_text(f"DEBUG: Антиспам заблокировал")  # Отладка: антиспам
         return
     try:
         arc = calc_arcana(program, text)
+        await update.message.reply_text(f"DEBUG: Аркан вычислен: {arc}")  # Отладка: калькулятор
         pdf = await get_pdf(program, arc)
+        await update.message.reply_text(f"DEBUG: PDF загружен для {program}, аркан {arc}")  # Отладка: PDF
         pretty = {"kapusta": "Капуста", "avatar": "Аватар", "amourchik": "Амурчик"}[program]
         await update.message.reply_document(pdf, caption=f"{pretty}: аркан {arc:02d}. Держи свой гайд.")
         mark_issue(uid)
@@ -63,7 +72,9 @@ async def on_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await admin_notify(context, f"❗️ Гайд отсутствует на диске\nПрограмма: {program}\nДата клиента: {text}\n"
                                     f"Ожидался файл: {arc:02d}.pdf")
+        await update.message.reply_text(f"DEBUG: FileNotFoundError для {arc:02d}.pdf")  # Отладка: нет файла
     except Exception as e:
         logging.exception("Ошибка выдачи PDF: %s", e)
         await update.message.reply_text("Не получилось выдать файл. Попробуй ещё раз позже.")
         await admin_notify(context, f"🔥 Ошибка выдачи\nПрограмма: {program}\nДата клиента: {text}\nОшибка: {e}")
+        await update.message.reply_text(f"DEBUG: Ошибка: {str(e)}")  # Отладка: ошибка
