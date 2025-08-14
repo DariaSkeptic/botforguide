@@ -9,6 +9,7 @@ def reduce_arcana(n: int) -> int:
     return 1 if n < 1 else n
 
 def compute_points(date_str: str) -> dict:
+    print(f"DEBUG: compute_points получил date_str='{date_str}'")
     dt = datetime.strptime(date_str, "%d.%m.%Y")
     day, month, year = dt.day, dt.month, dt.year
     A = reduce_arcana(sum(int(d) for d in f"{day:02d}"))
