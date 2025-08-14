@@ -36,18 +36,23 @@ async def main():
     logger.info("Инициализация приложения...")
     await app.initialize()
     logger.info("Запуск polling...")
-    await app.run_polling()
+    await app.run_polling(allowed_updates=["message", "callback_query"])
     logger.info("Polling запущен, бот активен")
 
-def start_bot():
-    logger.info("Старт программы botforguide.py")
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        logger.info("Цикл событий уже запущен, используем его")
-        loop.create_task(main())
-    else:
-        logger.info("Запуск нового цикла событий")
-        loop.run_until_complete(main())
-
 if __name__ == "__main__":
-    start_bot()
+    logger.info("Старт программы botforguide.py")
+    try:
+        loop = asyncio.get_running_loop()
+        logger.info("Используем существующий цикл событий")
+    except RuntimeError:
+        logger.info("Создаём новый цикл событий")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    loop.create_task(main())
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        logger.info("Остановка бота...")
+        loop.run_until_complete(loop.shutdown())
+        loop.close()
