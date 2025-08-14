@@ -49,10 +49,6 @@ if __name__ == "__main__":
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     
+    # Запускаем main как задачу в текущем цикле
     loop.create_task(main())
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        logger.info("Остановка бота...")
-        loop.run_until_complete(loop.shutdown())
-        loop.close()
+    logger.info("Задача main() добавлена в цикл событий")
