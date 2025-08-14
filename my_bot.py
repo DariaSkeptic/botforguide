@@ -15,7 +15,7 @@ from telegram import (
 )
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
-    MessageHandler, ContextTypes, ConversationHandler, filters
+    MessageHandler, ContextTypes, filters
 )
 
 # ────────────────────────── ЛОГИ ──────────────────────────
@@ -25,9 +25,6 @@ logging.basicConfig(
 )
 
 # ────────────────────────── КОНФИГ ────────────────────────
-# ОБЯЗАТЕЛЬНО задать эти переменные на Railway:
-# BOT_TOKEN, ADMIN_CHAT_ID, (опц) ADMIN_USER_ID,
-# GOOGLE_CREDENTIALS_JSON_B64, GDRIVE_FOLDER_KAPUSTA/AVATAR/AMOURCHIK
 TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 GDRIVE_FOLDER_KAPUSTA   = os.environ.get("GDRIVE_FOLDER_KAPUSTA", "").strip()
 GDRIVE_FOLDER_AVATAR    = os.environ.get("GDRIVE_FOLDER_AVATAR", "").strip()
@@ -43,14 +40,15 @@ PROGRAM_FOLDERS: Dict[str, str] = {
 ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID", "0") or "0")
 ADMIN_USER_ID = int(os.environ.get("ADMIN_USER_ID", "0") or "0")
 
-# Кодовые слова (из Инсты / вручную)
+# Кодовые слова приходят ТОЛЬКО в start-параметре из Инсты
 CODEWORDS = {
     "капуста": "kapusta", "kapusta": "kapusta",
     "аватар": "avatar",   "avatar":  "avatar",
     "амурчик": "amourchik", "amourchik": "amourchik", "amour": "amourchik",
 }
 
-DATE_RE = re.compile(r"^\s*(\d{2})\.(\d{2})\.(\d{4})\s*$")
+DATE_REGEX_STR = r"^\s*\d{2}\.\d{2}\.\d{4}\s*$"
+DATE_RE = re.compile(DATE_REGEX_STR)
 
 # ─────────────────────── АНТИСПАМ (sqlite) ───────────────────────
 DB_PATH = "antispam.db"
@@ -106,7 +104,6 @@ def reduce_arcana(n: int) -> int:
     return 1 if n < 1 else n
 
 def compute_points(date_str: str) -> dict:
-    # Базовый расчёт: A,B,V по сумме цифр дня/месяца/года; редукция до 1–22
     dt = datetime.strptime(date_str, "%d.%m.%Y")
     day, month, year = dt.day, dt.month, dt.year
     A = reduce_arcana(sum(int(d) for d in f"{day:02d}"))
@@ -179,9 +176,6 @@ async def get_pdf_from_drive(program: str, arcana: int) -> InputFile:
     return InputFile(BytesIO(data), filename=filename)
 
 # ───────────────────── Хелперы ─────────────────────
-def start_keyboard():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("СТАРТ", callback_data="go")]])
-
 def admin_keyboard():
     kb = [
         [InlineKeyboardButton("🧩 Диагностика", callback_data="adm:diag")],
@@ -202,16 +196,13 @@ def _extract_program_from_args(context: ContextTypes.DEFAULT_TYPE) -> Optional[s
     raw = context.args[0].strip().lower()
     return CODEWORDS.get(raw)
 
-def _extract_program_from_text(text: str) -> Optional[str]:
-    return CODEWORDS.get(text.strip().lower())
-
 async def admin_notify(context: ContextTypes.DEFAULT_TYPE, text: str):
     if not ADMIN_CHAT_ID:
         return
     try:
         await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=text, disable_web_page_preview=True)
     except Exception as e:
-        logging.warning("Не удалось отправить уведомление админу: %s", e)
+        logging.warning("Не удалось отправить сообщение в админ-чат: %s", e)
 
 def fmt_user(u) -> str:
     uname = f"@{u.username}" if u and u.username else "—"
@@ -221,62 +212,44 @@ def fmt_user(u) -> str:
 def _is_admin(update: Update) -> bool:
     return ADMIN_USER_ID and update.effective_user and update.effective_user.id == ADMIN_USER_ID
 
-# ───────────────────── Состояния ─────────────────────
-ASK_DATE = 1  # ждём дату
-
 # ───────────────────── Клиентский поток ─────────────────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /start [codeword] — программа задаётся кодовым словом.
-    В боте: показываем только кнопку «СТАРТ». Юрдоки/согласия — в твоём Description перед кнопкой.
+    /start <codeword> — кодовое слово обязательно приходит из Инсты.
+    Никаких вопросов в чате. Если кода нет/неверный — сообщаем об ошибке.
+    Если код валидный — сразу привет и запрос даты.
     """
     program = _extract_program_from_args(context)
-    if program:
-        context.user_data["program"] = program
 
-    if not context.user_data.get("program"):
-        target = update.message or update.callback_query.message
-        await target.reply_text("Введи кодовое слово: капуста / аватар / амурчик")
-        return ConversationHandler.END
-
-    target = update.message or update.callback_query.message
-    await target.reply_text("Нажми «СТАРТ», чтобы начать.", reply_markup=start_keyboard())
-
-    u = update.effective_user
-    prog = context.user_data.get("program", "—")
-    await admin_notify(context, f"🟡 Старт сценария\nПрограмма: {prog}\nПользователь: {fmt_user(u)}")
-
-    return ConversationHandler.END
-
-async def on_codeword(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get("program"):
-        return
-    program = _extract_program_from_text(update.message.text)
     if not program:
+        target = update.message or update.callback_query.message
+        await target.reply_text(
+            "Некорректная или устаревшая ссылка запуска. Перейди по актуальной ссылке из Instagram."
+        )
         return
-    context.user_data["program"] = program
-    await update.message.reply_text("Нажми «СТАРТ», чтобы начать.", reply_markup=start_keyboard())
-    await admin_notify(context, f"🟡 Получено кодовое слово\nПрограмма: {program}\nПользователь: {fmt_user(update.effective_user)}")
 
-async def on_go(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
+    context.user_data["program"] = program
+
     user = update.effective_user
     name = user.first_name or user.username or "друг"
-    await update.callback_query.message.reply_text(
+    await (update.message or update.callback_query.message).reply_text(
         f"Привет, {name}. Кидай дату рождения в формате ДД.ММ.ГГГГ."
     )
-    return ASK_DATE
+
+    await admin_notify(context, f"🟡 Старт сценария\nПрограмма: {program}\nПользователь: {fmt_user(user)}")
 
 async def on_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     if not DATE_RE.match(text):
         await update.message.reply_text("Формат даты: ДД.ММ.ГГГГ (например 14.08.1990).")
-        return ASK_DATE
+        return
 
     program = context.user_data.get("program")
     if not program:
-        await update.message.reply_text("Сначала введи кодовое слово: капуста / аватар / амурчик.")
-        return ConversationHandler.END
+        await update.message.reply_text(
+            "Сессия не инициализирована. Перейди по ссылке из Instagram ещё раз."
+        )
+        return
 
     uid = update.effective_user.id
     if not can_issue(uid):
@@ -286,7 +259,7 @@ async def on_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = "Лимит выдачи исчерпан. Попробуй позже."
         if wait: msg += f" Ориентировочно через {wait} мин."
         await update.message.reply_text(msg)
-        return ConversationHandler.END
+        return
 
     try:
         arc = calc_arcana(program, text)
@@ -307,15 +280,13 @@ async def on_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Не получилось выдать файл. Попробуй ещё раз позже.")
         await admin_notify(context, f"🔥 Ошибка выдачи\nПрограмма: {program}\nДата клиента: {text}\nОшибка: {e}")
 
-    return ConversationHandler.END
-
 # ───────────────────── Админ‑панель ─────────────────────
 async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_admin(update): return
     await update.message.reply_text("Панель администратора:", reply_markup=admin_keyboard())
 
 async def adm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not _is_admin(update): 
+    if not _is_admin(update):
         await update.callback_query.answer()
         return
     data = update.callback_query.data
@@ -326,7 +297,9 @@ async def adm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "adm:missing":
         await admin_missing(update, context)
     elif data == "adm:myid":
-        await update.callback_query.message.reply_text(f"Твой Telegram ID: <code>{update.effective_user.id}</code>", parse_mode="HTML")
+        await update.callback_query.message.reply_text(
+            f"Твой Telegram ID: <code>{update.effective_user.id}</code>", parse_mode="HTML"
+        )
     elif data == "adm:test":
         await admin_notify(context, "Тест: сообщение в админ‑чат работает ✅")
         await update.callback_query.message.reply_text("Отправила тест в админ‑чат.")
@@ -334,7 +307,6 @@ async def adm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await admin_cfg(update, context)
 
 async def admin_diag(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Проверяем базовые вещи: токен, креды, папки
     problems = []
     ok = []
     if TOKEN: ok.append("BOT_TOKEN: OK")
@@ -367,7 +339,6 @@ async def admin_diag(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.message.reply_text(text)
 
 async def admin_missing(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Для каждой программы проверяем, какие NN.pdf отсутствуют (01..22)
     report_lines = ["📁 Недостающие PDF:"]
     try:
         for program, folder in PROGRAM_FOLDERS.items():
@@ -391,7 +362,6 @@ async def admin_missing(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.message.reply_text("\n".join(report_lines))
 
 async def admin_cfg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Показать конфиг (без секретов)
     pretty_map = {
         "kapusta": GDRIVE_FOLDER_KAPUSTA,
         "avatar": GDRIVE_FOLDER_AVATAR,
@@ -410,7 +380,7 @@ async def admin_cfg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.callback_query.message.reply_text(text)
 
-# ───────────── Сервисные команды (как в «боте для ботов») ─────────────
+# ───────────── Сервисные команды ─────────────
 async def cmd_where(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_admin(update): return
     c = update.effective_chat
@@ -437,21 +407,14 @@ async def cmd_panic(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ────────────────────────── MAIN ──────────────────────────
 if __name__ == "__main__":
     antispam_init()
-
     if not TOKEN:
         raise SystemExit("BOT_TOKEN не задан. Добавь переменную в Railway → Variables.")
 
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Клиентский поток
-    conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(on_go, pattern="^go$")],
-        states={ASK_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, on_date)]},
-        fallbacks=[]
-    )
+    # Порядок важен: сначала ловим дату, затем админ-панель/команды
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(conv)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_codeword))  # кодовое слово
+    app.add_handler(MessageHandler(filters.Regex(DATE_REGEX_STR) & filters.TEXT, on_date))
 
     # Админ‑панель
     app.add_handler(CommandHandler("admin", cmd_admin))
