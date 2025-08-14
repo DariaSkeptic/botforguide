@@ -1,38 +1,18 @@
-from datetime import datetime
+import datetime
 import logging
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-def reduce_arcana(n: int) -> int:
-    n = abs(int(n))
-    while n > 22:
-        n = sum(int(d) for d in str(n))
-        if n == 0:
-            n = 22
-    return 1 if n < 1 else n
-
-def compute_points(date_str: str) -> dict:
-    logger.info(f"compute_points получил date_str='{date_str}'")
+def calculate_arcana(date_str):
     try:
-        dt = datetime.strptime(date_str, "%d.%m.%Y")
-        day, month, year = dt.day, dt.month, dt.year
-        A = reduce_arcana(sum(int(d) for d in f"{day:02d}"))
-        B = reduce_arcana(sum(int(d) for d in f"{month:02d}"))
-        V = reduce_arcana(sum(int(d) for d in f"{year:04d}"))
-        G = reduce_arcana(A + B + V)        # деньги
-        D = reduce_arcana(A + B + V + G)    # восприятие
-        E = reduce_arcana(D + G)            # любовь
-        logger.info(f"Арканы: A={A}, B={B}, V={V}, G={G}, D={D}, E={E}")
-        return {"A": A, "B": B, "V": V, "G": G, "D": D, "E": E}
-    except ValueError as e:
-        logger.error(f"Ошибка парсинга даты '{date_str}': {str(e)}")
+        day, month, year = map(int, date_str.split('.'))
+        birth_date = datetime.date(year, month, day)
+        total = sum(int(x) for x in str(birth_date.year) + str(birth_date.month) + str(birth_date.day))
+        while total > 22:
+            total = sum(int(x) for x in str(total))
+        return total if total != 0 else 22  # 22 - ноль арканов
+    except ValueError:
+        logger.error(f"Некорректный формат даты: {date_str}")
         raise
-
-def calc_arcana(program: str, date_str: str) -> int:
-    logger.info(f"calc_arcana для программы {program}, дата {date_str}")
-    pts = compute_points(date_str)
-    if program == "kapusta":
-        return pts["G"]
-    if program == "avatar":
-        return pts["D"]
-    return pts["E"]  # amourchik
