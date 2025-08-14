@@ -36,8 +36,17 @@ async def main():
     logger.info("Инициализация приложения...")
     await app.initialize()
     logger.info("Запуск polling...")
-    await app.run_polling(allowed_updates=["message", "callback_query"])
-    logger.info("Polling запущен, бот активен")
+    try:
+        await app.run_polling(allowed_updates=["message", "callback_query"])
+        logger.info("Polling запущен, бот активен")
+    except Exception as e:
+        logger.error(f"Ошибка в run_polling: {str(e)}")
+        raise
+    finally:
+        logger.info("Остановка polling...")
+        await app.stop()
+        await app.shutdown()
+        logger.info("Бот полностью остановлен")
 
 if __name__ == "__main__":
     logger.info("Старт программы botforguide.py")
@@ -49,6 +58,14 @@ if __name__ == "__main__":
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     
-    # Запускаем main как задачу в текущем цикле
+    logger.info("Добавляем задачу main() в цикл событий")
     loop.create_task(main())
-    logger.info("Задача main() добавлена в цикл событий")
+    
+    try:
+        logger.info("Запуск цикла событий с run_forever")
+        loop.run_forever()
+    except Exception as e:
+        logger.error(f"Ошибка в цикле событий: {str(e)}")
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
+        logger.info("Цикл событий закрыт")
