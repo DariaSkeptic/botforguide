@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from start_router import cmd_start, on_date
 from admin_router import cmd_admin, admin_panel_callback
@@ -32,10 +33,21 @@ async def main():
     app.add_handler(CommandHandler("where", cmd_where))
     app.add_handler(CommandHandler("panic", cmd_panic))
     
+    logger.info("Инициализация приложения...")
+    await app.initialize()
     logger.info("Запуск polling...")
     await app.run_polling()
+    logger.info("Polling запущен, бот активен")
+
+def start_bot():
+    logger.info("Старт программы botforguide.py")
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        logger.info("Цикл событий уже запущен, используем его")
+        loop.create_task(main())
+    else:
+        logger.info("Запуск нового цикла событий")
+        loop.run_until_complete(main())
 
 if __name__ == "__main__":
-    import asyncio
-    logger.info("Старт программы botforguide.py")
-    asyncio.run(main())
+    start_bot()
