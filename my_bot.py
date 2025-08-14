@@ -1,28 +1,20 @@
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
-    MessageHandler, filters
-)
-
-from config import TOKEN, DATE_REGEX_STR
-from antispam import init as antispam_init
+import os
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from start_router import cmd_start, on_date
-from admin_router import cmd_admin, adm_callback, cmd_where, cmd_panic
+from admin_router import cmd_admin, admin_panel_callback
+from where import cmd_where
+from panic import cmd_panic
 
-if __name__ == "__main__":
-    antispam_init()
-    if not TOKEN:
-        raise SystemExit("BOT_TOKEN не задан. Добавь переменную в Railway → Variables.")
-
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    # Клиентские handlers
+async def main():
+    app = Application.builder().token(os.getenv("BOT_TOKEN")).build()
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(MessageHandler(filters.Regex(DATE_REGEX_STR) & filters.TEXT, on_date))
-
-    # Админ handlers
+    app.add_handler(MessageHandler(filters.Regex(r"^\s*\d{2}\.\d{2}\.\d{4}\s*$") & filters.TEXT, on_date))
     app.add_handler(CommandHandler("admin", cmd_admin))
-    app.add_handler(CallbackQueryHandler(adm_callback, pattern=r"^adm:"))
+    app.add_handler(CallbackQueryHandler(admin_panel_callback))
     app.add_handler(CommandHandler("where", cmd_where))
     app.add_handler(CommandHandler("panic", cmd_panic))
+    await app.run_polling()
 
-    app.run_polling()
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
