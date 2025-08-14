@@ -3,7 +3,7 @@ import logging
 import asyncio
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from start_router import cmd_start, on_date
-from admin_router import cmd_admin, admin_panel_callback
+from admin_router import cmd_admin, admin_panel_callback, cmd_reset, cmd_restart, set_admin_menu
 from where import cmd_where
 from panic import cmd_panic
 
@@ -30,11 +30,15 @@ async def main():
     app.add_handler(MessageHandler(filters.Regex(r"^\s*\d{2}\.\d{2}\.\d{4}\s*$") & filters.TEXT, on_date))
     app.add_handler(CommandHandler("admin", cmd_admin))
     app.add_handler(CallbackQueryHandler(admin_panel_callback))
+    app.add_handler(CommandHandler("reset", cmd_reset))
+    app.add_handler(CommandHandler("restart", cmd_restart))
     app.add_handler(CommandHandler("where", cmd_where))
     app.add_handler(CommandHandler("panic", cmd_panic))
     
     logger.info("Инициализация приложения...")
     await app.initialize()
+    logger.info("Установка меню админа...")
+    await set_admin_menu(app)  # Устанавливаем меню для админа
     logger.info("Запуск polling...")
     try:
         await app.start()
