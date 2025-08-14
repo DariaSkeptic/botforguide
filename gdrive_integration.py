@@ -52,3 +52,21 @@ def list_missing_guides():
             except Exception as e:
                 logger.error(f"Ошибка при сканировании {program}: {str(e)}")
     return missing
+
+def list_existing_guides():
+    folders = {
+        "kapusta": os.getenv("GDRIVE_FOLDER_KAPUSTA"),
+        "avatar": os.getenv("GDRIVE_FOLDER_AVATAR"),
+        "amourchik": os.getenv("GDRIVE_FOLDER_AMOURCHIK")
+    }
+    existing = []
+    for program, folder_id in folders.items():
+        if folder_id:
+            try:
+                response = drive_service.files().list(q=f"'{folder_id}' in parents", fields="files(name)").execute()
+                files = response.get('files', [])
+                for file in files:
+                    existing.append(f"{program}/{file['name']}")
+            except Exception as e:
+                logger.error(f"Ошибка при сканировании {program} для существующих файлов: {str(e)}")
+    return existing
