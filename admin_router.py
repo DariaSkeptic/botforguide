@@ -1,86 +1,103 @@
 import os
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CallbackContext
+from telegram import Update, BotCommand
+from telegram.ext import ContextTypes
 from gdrive_integration import list_missing_guides, list_existing_guides
 from config import ADMIN_USER_ID, ADMIN_CHAT_ID
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-def _kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Missing PDF", callback_data="missing_pdfs")],
-        [InlineKeyboardButton("Existing PDF", callback_data="existing_pdfs")],
-        [InlineKeyboardButton("Env", callback_data="env_vars")],
-        [InlineKeyboardButton("IDs", callback_data="ids_settings")],
-    ])
+def _is_admin(user) -> bool:
+    return bool(ADMIN_USER_ID) and (user.id == ADMIN_USER_ID)
 
-async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if ADMIN_USER_ID and update.effective_user.id == ADMIN_USER_ID:
-        await update.message.reply_text("Admin panel:", reply_markup=_kb())
-    else:
-        await update.message.reply_text("Access denied.")
+async def _deny(update: Update):
+    await update.message.reply_text("Access denied.")
 
-async def admin_panel_callback(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()
+async def cmd_missing(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update.effective_user):
+        return await _deny(update)
+    try:
+        items = list_missing_guides()
+        text = "Missing PDF:\n" + ("\n".join(items) if items else "All good.")
+    except Exception as e:
+        text = "Error: " + str(e)
+    await update.message.reply_text(text)
 
-    if not (ADMIN_USER_ID and query.from_user.id == ADMIN_USER_ID):
-        await query.edit_message_text("Access denied.")
-        return
+async def cmd_existing(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update.effective_user):
+        return await _deny(update)
+    try:
+        items = list_existing_guides()
+        text = "Existing PDF:\n" + ("\n".join(items) if items else "No files.")
+    except Exception as e:
+        text = "Error: " + str(e)
+    await update.message.reply_text(text)
 
-    data = query.data
-    if data == "missing_pdfs":
-        try:
-            items = list_missing_guides()
-            text = "Missing PDF:\n" + ("\n".join(items) if items else "All good.")
-        except Exception as e:
-            text = "Error: " + str(e)
-        await query.edit_message_text(text, reply_markup=_kb())
-        return
+async def cmd_env(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update.effective_user):
+        return await _deny(update)
+    envs = {
+        "BOT_TOKEN": ("set" if os.getenv("BOT_TOKEN") else "unset"),
+        "ADMIN_USER_ID": os.getenv("ADMIN_USER_ID", "unset"),
+        "ADMIN_CHAT_ID": os.getenv("ADMIN_CHAT_ID", "unset"),
+        "GDRIVE_FOLDER_KAPUSTA": os.getenv("GDRIVE_FOLDER_KAPUSTA", "unset"),
+        "GDRIVE_FOLDER_AVATAR": os.getenv("GDRIVE_FOLDER_AVATAR", "unset"),
+        "GDRIVE_FOLDER_AMOURCHIK": os.getenv("GDRIVE_FOLDER_AMOURCHIK", "unset"),
+        "GOOGLE_CREDENTIALS_JSON_B64": ("set" if os.getenv("GOOGLE_CREDENTIALS_JSON_B64") else "unset"),
+    }
+    lines = [k + ": " + v for k, v in envs.items()]
+    await update.message.reply_text("Env:\n" + "\n".join(lines))
 
-    if data == "existing_pdfs":
-        try:
-            items = list_existing_guides()
-            text = "Existing PDF:\n" + ("\n".join(items) if items else "No files.")
-        except Exception as e:
-            text = "Error: " + str(e)
-        await query.edit_message_text(text, reply_markup=_kb())
-        return
-
-    if data == "env_vars":
-        envs = {
-            "BOT_TOKEN": ("set" if os.getenv("BOT_TOKEN") else "unset"),
-            "ADMIN_USER_ID": os.getenv("ADMIN_USER_ID", "unset"),
-            "ADMIN_CHAT_ID": os.getenv("ADMIN_CHAT_ID", "unset"),
-            "GDRIVE_FOLDER_KAPUSTA": os.getenv("GDRIVE_FOLDER_KAPUSTA", "unset"),
-            "GDRIVE_FOLDER_AVATAR": os.getenv("GDRIVE_FOLDER_AVATAR", "unset"),
-            "GDRIVE_FOLDER_AMOURCHIK": os.getenv("GDRIVE_FOLDER_AMOURCHIK", "unset"),
-            "GOOGLE_CREDENTIALS_JSON_B64": ("set" if os.getenv("GOOGLE_CREDENTIALS_JSON_B64") else "unset"),
-        }
-        lines = [k + ": " + v for k, v in envs.items()]
-        text = "Env:\n" + "\n".join(lines)
-        await query.edit_message_text(text, reply_markup=_kb())
-        return
-
-    if data == "ids_settings":
-        text = "IDs:\nYour ID: " + str(query.from_user.id) + "\nADMIN_USER_ID: " + str(ADMIN_USER_ID) + "\nADMIN_CHAT_ID: " + str(ADMIN_CHAT_ID)
-        await query.edit_message_text(text, reply_markup=_kb())
-        return
+async def cmd_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update.effective_user):
+        return await _deny(update)
+    txt = (
+        "IDs:\n"
+        "Your ID: " + str(update.effective_user.id) + "\n"
+        "ADMIN_USER_ID: " + str(ADMIN_USER_ID) + "\n"
+        "ADMIN_CHAT_ID: " + str(ADMIN_CHAT_ID)
+    )
+    await update.message.reply_text(txt)
 
 async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if ADMIN_USER_ID and update.effective_user.id == ADMIN_USER_ID:
-        await update.message.reply_text("Bot reset (dummy).")
-    else:
-        await update.message.reply_text("Access denied.")
+    if not _is_admin(update.effective_user):
+        return await _deny(update)
+    await update.message.reply_text("Bot reset (dummy).")
 
 async def cmd_restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if ADMIN_USER_ID and update.effective_user.id == ADMIN_USER_ID:
-        await update.message.reply_text("Restart requested. Redeploy manually.")
-    else:
-        await update.message.reply_text("Access denied.")
+    if not _is_admin(update.effective_user):
+        return await _deny(update)
+    await update.message.reply_text("Restart requested. Redeploy manually.")
 
 async def set_admin_menu(application):
-    # No-op: keep commands manual to avoid scope issues on PTB 20+
-    return
+    """
+    Ставим командное меню (без /admin), только полезные пункты.
+    Пытаемся ограничить меню админ-чатом, иначе — глобально.
+    """
+    commands = [
+        BotCommand("missing", "Show missing PDFs"),
+        BotCommand("existing", "List existing PDFs"),
+        BotCommand("env", "Show env vars status"),
+        BotCommand("ids", "Show IDs"),
+        BotCommand("reset", "Reset bot"),
+        BotCommand("restart", "Restart (manual redeploy)"),
+    ]
+
+    # Скоп — только админ-чат, если задан
+    if ADMIN_CHAT_ID:
+        try:
+            from telegram import BotCommandScopeChat  # PTB 20+
+            scope = BotCommandScopeChat(chat_id=int(ADMIN_CHAT_ID))
+            await application.bot.set_my_commands(commands=commands, scope=scope)
+            logger.info("Admin menu installed for chat %s", ADMIN_CHAT_ID)
+            return
+        except Exception as e:
+            logger.warning("Scoped admin menu not available (%s). Falling back to global.", e)
+
+    # Фолбэк — глобально
+    try:
+        await application.bot.set_my_commands(commands=commands)
+        logger.info("Global command menu installed as fallback.")
+    except Exception as e:
+        logger.warning("Failed to set command menu: %s", e)
