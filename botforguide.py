@@ -1,6 +1,6 @@
 import logging
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from start_router import cmd_start, on_date
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from start_router import cmd_start, start_go, on_date, on_noise
 from admin_router import (
     cmd_missing, cmd_existing, cmd_env, cmd_ids,
     cmd_reset, cmd_restart, set_admin_menu
@@ -22,11 +22,14 @@ def main():
 
     app = Application.builder().token(token).post_init(_post_init).build()
 
-    # Клиентская логика
+    # Пользовательский сценарий
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(MessageHandler(filters.Regex(r"^\s*\d{2}\.\d{2}\.\d{4}\s*$") & filters.TEXT, on_date))
+    app.add_handler(CallbackQueryHandler(start_go, pattern=r"^go$"))
+    date_regex = r"^\s*\d{2}\.\d{2}\.\d{4}\s*$"
+    app.add_handler(MessageHandler(filters.TEXT & filters.Regex(date_regex), on_date))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex(date_regex), on_noise))
 
-    # Админ-команды (без /admin панели)
+    # Админ-меню (видно только админу — меню команд в строке ввода)
     app.add_handler(CommandHandler("missing", cmd_missing))
     app.add_handler(CommandHandler("existing", cmd_existing))
     app.add_handler(CommandHandler("env", cmd_env))
@@ -38,7 +41,7 @@ def main():
     app.add_handler(CommandHandler("where", cmd_where))
     app.add_handler(CommandHandler("panic", cmd_panic))
 
-    app.run_polling(allowed_updates=["message"])
+    app.run_polling(allowed_updates=["message", "callback_query"])
 
 if __name__ == "__main__":
     main()
